@@ -4,63 +4,76 @@ import cl.duoc.review.dto.ReviewCreateDTO;
 import cl.duoc.review.dto.ReviewDTO;
 import cl.duoc.review.model.Review;
 import cl.duoc.review.repository.ReviewRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
+@RequiredArgsConstructor
 public class ReviewService {
 
     private final ReviewRepository reviewRepository;
+    private final WebClient.Builder webClientBuilder;
 
-    public ReviewService(ReviewRepository reviewRepository) {
-        this.reviewRepository = reviewRepository;
+  
+    public boolean validateToken(String token) {
+        try {
+            ApiResponse<?> response = webClientBuilder.build()
+                    .get()
+                    .uri("http://login/api/v1/users/validate?token=" + token)
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<ApiResponse<?>>() {})
+                    .block();
+            return response != null && response.getCode() == 200;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
-    public ReviewDTO create(ReviewCreateDTO dto) {
+  
+    public boolean validateDestinationExists(Long destinationId) {
+        try {
+            ApiResponse<?> response = webClientBuilder.build()
+                    .get()
+                    .uri("http://destination/api/v1/destination/destinations/exists?id=" + destinationId)
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<ApiResponse<?>>() {})
+                    .block();
+            return response != null && response.getCode() == 200 && (Boolean) response.getData();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+   
+    public ReviewDTO createReview(ReviewCreateDTO dto) {
+        if (!validateDestinationExists(dto.getDestinationId())) {
+            throw new IllegalArgumentException("El destino con ID " + dto.getDestinationId() + " no existe.");
+        }
+
         Review review = Review.builder()
                 .destinationId(dto.getDestinationId())
                 .username(dto.getUsername())
                 .rating(dto.getRating())
                 .comment(dto.getComment())
                 .build();
-        Review saved = reviewRepository.save(review);
-        return mapToDTO(saved);
+
+        Review savedReview = reviewRepository.save(review);
+        return convertToDTO(savedReview);
     }
 
-    public List<ReviewDTO> getAll() {
+   
+    public List<ReviewDTO> getAllReviews() {
         return reviewRepository.findAll().stream()
-                .map(this::mapToDTO)
+                .map(this::convertToDTO)
                 .collect(Collectors.toList());
     }
 
-    public ReviewDTO getById(Long id) {
-        Review review = reviewRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Reseña no encontrada con el ID: " + id));
-        return mapToDTO(review);
-    }
-
-    public ReviewDTO update(Long id, ReviewCreateDTO dto) {
-        Review review = reviewRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Reseña no encontrada con el ID: " + id));
-        
-        review.setDestinationId(dto.getDestinationId());
-        review.setUsername(dto.getUsername());
-        review.setRating(dto.getRating());
-        review.setComment(dto.getComment());
-        
-        Review updated = reviewRepository.save(review);
-        return mapToDTO(updated);
-    }
-
-    public void delete(Long id) {
-        Review review = reviewRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Reseña no encontrada con el ID: " + id));
-        reviewRepository.delete(review);
-    }
-
-    private ReviewDTO mapToDTO(Review review) {
+    private ReviewDTO convertToDTO(Review review) {
         return new ReviewDTO(
                 review.getId(),
                 review.getDestinationId(),
