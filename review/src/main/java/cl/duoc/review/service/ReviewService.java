@@ -1,6 +1,5 @@
 package cl.duoc.review.service;
 
-import cl.duoc.review.dto.ApiResponse;
 import cl.duoc.review.dto.ReviewCreateDTO;
 import cl.duoc.review.dto.ReviewDTO;
 import cl.duoc.review.model.Review;
